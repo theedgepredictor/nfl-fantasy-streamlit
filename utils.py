@@ -1,0 +1,186 @@
+import pandas as pd
+from pandas.core.dtypes.common import is_numeric_dtype
+import datetime
+
+def did_away_team_cover(spread_line, away_team_spread):
+    """Returns True if away team covered the spread"""
+    if spread_line < 0:  # Away team is favored
+        return away_team_spread > abs(spread_line)
+    else:  # Home team is favored
+        return away_team_spread < spread_line
+
+def transform_teams_for_current_week(folded_df, season, week):
+    filtered_df = folded_df[((folded_df['season'] == season) & (folded_df['week'] == week))].copy()
+    if week == 1:
+        s = folded_df[((folded_df['season'] == season-1) & (folded_df['week'] < 18 if season > 2021 else 17))].copy()
+    else:
+        s = folded_df[((folded_df['season'] == season) & (folded_df['week'] < week))].copy()
+    s['avg_points_over_expected'] = s['actual_points'] - s['expected_points']
+    s['actual_over_covered'] = s['actual_under_covered'] == 0
+    points_over_expected = s.groupby(['team'])['avg_points_over_expected'].mean().sort_values(ascending=False).reset_index()
+    covered_spread = s.groupby(['team'])['actual_team_covered_spread'].sum().sort_values(ascending=False).reset_index()
+    went_under = s.groupby(['team'])['actual_over_covered'].sum().sort_values(ascending=False).reset_index()
+
+    joiners = [
+        points_over_expected,
+        covered_spread,
+        went_under
+    ]
+    filtered_df = filtered_df.drop(columns=['actual_under_covered', 'actual_team_covered_spread'])
+    for j in joiners:
+        filtered_df = pd.merge(filtered_df, j, on=['team'], how='left')
+    return filtered_df
+
+def df_rename_pivot(df, all_cols, pivot_cols, t1_prefix, t2_prefix, sub_merge_df=None):
+    '''
+    The reverse of a df_rename_fold
+    Pivot one generic type into two prefixed column types
+    Ex: team_id -> away_team_id and home_team_id
+    '''
+    try:
+        df = df[all_cols]
+        t1_cols = [t1_prefix + i for i in all_cols if i not in pivot_cols]
+        t2_cols = [t2_prefix + i for i in all_cols if i not in pivot_cols]
+        original_cols = [i for i in all_cols if i not in pivot_cols]
+
+        t1_renamed_pivot_df = df.rename(columns=dict(zip(original_cols, t1_cols)))
+        t2_renamed_pivot_df = df.rename(columns=dict(zip(original_cols, t2_cols)))
+
+        if sub_merge_df is None:
+            df_out = pd.merge(t1_renamed_pivot_df, t2_renamed_pivot_df, on=pivot_cols).reset_index().drop(columns='index')
+        else:
+            sub_merge_cols = sub_merge_df.columns.values
+            t1_sub_df = pd.merge(sub_merge_df, t1_renamed_pivot_df, how='inner', left_on=[t1_prefix + i for i in pivot_cols], right_on=pivot_cols).drop(columns=pivot_cols)
+            t2_sub_df = pd.merge(sub_merge_df, t2_renamed_pivot_df, how='inner', left_on=[t2_prefix + i for i in pivot_cols], right_on=pivot_cols).drop(columns=pivot_cols)
+            df_out = pd.merge(t1_sub_df, t2_sub_df, on=list(sub_merge_cols))
+        return df_out
+    except Exception as e:
+        print("--df_rename_pivot-- " + str(e))
+        print(f"columns in: {df.columns}")
+        print(f"shape: {df.shape}")
+        return df
+
+
+def df_rename_fold(df, t1_prefix, t2_prefix):
+    '''
+    The reverse of a df_rename_pivot
+    Fold two prefixed column types into one generic type
+    Ex: away_team_id and home_team_id -> team_id
+    '''
+    try:
+        t1_all_cols = [i for i in df.columns if t2_prefix not in i]
+        t2_all_cols = [i for i in df.columns if t1_prefix not in i]
+
+        t1_cols = [i for i in df.columns if t1_prefix in i]
+        t2_cols = [i for i in df.columns if t2_prefix in i]
+        t1_new_cols = [i.replace(t1_prefix, '') for i in df.columns if t1_prefix in i]
+        t2_new_cols = [i.replace(t2_prefix, '') for i in df.columns if t2_prefix in i]
+
+        t1_df = df[t1_all_cols].rename(columns=dict(zip(t1_cols, t1_new_cols)))
+        t2_df = df[t2_all_cols].rename(columns=dict(zip(t2_cols, t2_new_cols)))
+
+        df_out = pd.concat([t1_df, t2_df]).reset_index().drop(columns='index')
+        return df_out
+    except Exception as e:
+        print("--df_rename_fold-- " + str(e))
+        print(f"columns in: {df.columns}")
+        print(f"shape: {df.shape}")
+        return df
+
+
+def df_rename_dif(df, t1_prefix=None, t2_prefix=None, t1_cols=None, t2_cols=None, sub_prefix=''):
+    '''
+    An extension of the df_rename_pivot
+    Take the difference of two prefixed column types
+    Ex: away_team_turnovers - home_team_turnovers -> team_turnovers_dif
+    Note: This method applies the difference to the columns and removes the two prefixed column types
+    '''
+    if t1_cols is None and t2_cols is None:
+        if t1_prefix is None or t2_prefix is None:
+            raise Exception('You must specify either prefix or cols')
+        t1_cols = [i for i in df.columns if t1_prefix in i]
+        t2_cols = [i for i in df.columns if t2_prefix in i]
+    for t1_col, t2_col in zip(t1_cols, t2_cols):
+        if is_numeric_dtype(df[t1_col]) and is_numeric_dtype(df[t2_col]):
+            df[f"dif_{t1_col.replace(t1_prefix, sub_prefix)}"] = df[t1_col] - df[t2_col]
+    df_out = df.drop(columns=t1_cols + t2_cols)
+    return df_out
+
+def df_rename_exavg(df, t1_prefix=None, t2_prefix=None, t1_cols=None, t2_cols=None, sub_prefix=''):
+    '''
+    An extension of the df_rename_pivot
+    Take the average of two prefixed column types to get the exavg (expected average)
+    Ex: (away_team_turnovers + home_team_turnovers)/2 -> team_turnovers_df_rename_exavg
+    Note: This method applies the exavg to the columns and removes the two prefixed column types
+    '''
+    if t1_cols is None and t2_cols is None:
+        if t1_prefix is None or t2_prefix is None:
+            raise Exception('You must specify either prefix or cols')
+        t1_cols = [i for i in df.columns if t1_prefix in i]
+        t2_cols = [i for i in df.columns if t2_prefix in i]
+    for t1_col, t2_col in zip(t1_cols, t2_cols):
+        if is_numeric_dtype(df[t1_col]) and is_numeric_dtype(df[t2_col]):
+            df[f"exavg_{t1_col.replace(t1_prefix, sub_prefix)}"] = (df[t1_col] + df[t2_col]) / 2
+    df_out = df.drop(columns=t1_cols + t2_cols)
+    return df_out
+
+def df_rename_shift(df, drop_cols=None):
+    if drop_cols is not None:
+        df = df.drop(columns=drop_cols)
+
+    root_cols = [col for col in df.columns if '_offense' not in col and '_defense' not in col and 'away_' not in col and 'home_' not in col]
+
+    away_cols = [col for col in df.columns if '_offense' not in col and '_defense' not in col and 'away_' in col and 'home_' not in col]
+    away_rename_dict = {col: col.replace('away_', '') for col in away_cols}
+    home_cols = [col for col in df.columns if '_offense' not in col and '_defense' not in col and 'away_' not in col and 'home_' in col]
+    home_rename_dict = {col: col.replace('home_', '') for col in home_cols}
+
+    off_away_cols = [col for col in df.columns if '_offense' in col and 'away_' in col]
+    off_away_rename_dict = {col: col.replace('away_', '') for col in off_away_cols}
+    def_away_cols = [col for col in df.columns if '_defense' in col and 'away_' in col]
+    def_away_rename_dict = {col: col.replace('away_', '') for col in def_away_cols}
+
+    off_home_cols = [col for col in df.columns if '_offense' in col and 'home_' in col]
+    off_home_rename_dict = {col: col.replace('home_', '') for col in off_home_cols}
+    def_home_cols = [col for col in df.columns if '_defense' in col and 'home_' in col]
+    def_home_rename_dict = {col: col.replace('home_', '') for col in def_home_cols}
+
+    away_df = df[root_cols + away_cols + off_away_cols + def_home_cols].rename(columns={**away_rename_dict, **off_away_rename_dict, **def_home_rename_dict})
+    away_df['is_home'] = 0
+    home_df = df[root_cols + home_cols + off_home_cols + def_away_cols].rename(columns={**home_rename_dict, **off_home_rename_dict, **def_away_rename_dict})
+    home_df['is_home'] = 1
+    del df
+    out_df = pd.concat([away_df, home_df])
+    return out_df
+
+## assignment functions that replaces fastr team names with legacy team names ##
+repl = {
+    'OAK': 'LV',  # Oakland Raiders became Las Vegas Raiders
+    'ARZ': 'ARI',  # Arizona Cardinals abbreviation changed
+    'HST': 'HOU',  # Houston Texans abbreviation changed
+    'BLT': 'BAL',  # Baltimore Ravens abbreviation changed
+    'SL': 'LAR',  # St. Louis Rams became Los Angeles Rams
+    'CLV': 'CLE',  # Cleveland Browns abbreviation changed
+    'SD': 'LAC',  # San Diego Chargers became Los Angeles Chargers
+    'LA': 'LAR', # Los Angeles Rams abbreviation changed
+    'STL': 'LAR', # St. Louis Rams became Los Angeles Rams
+    'SDG': 'LAC', # San Diego Chargers abbreviation changed
+    'WSH': 'WAS', # Washington Redskins abbreviation changed
+}
+
+def team_id_repl(df):
+    """
+    Replaces fastr team ids with a legacy nfelo ids.
+    """
+    ## if a col with team names exists, replace it ##
+    for col in [
+        'home_team', 'away_team', 'team_abbr',
+        'posteam', 'defteam', 'penalty_team',
+        'side_of_field', 'timeout_team', 'td_team',
+        'return_team', 'possession_team',
+        'recent_team', 'opponent_team', 'team1', 'team2',
+        'latest_team', 'draft_team','team','team_abb'
+    ]:
+        if col in df.columns:
+            df[col] = df[col].replace(repl)
+    return df
