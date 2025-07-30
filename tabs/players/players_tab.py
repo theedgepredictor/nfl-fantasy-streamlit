@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from consts import POSITION_STAT_MAP
 
 def display_event_player_tab(dataset_df, event_player_df):
     st.subheader("Event Players", anchor=False)
@@ -31,13 +32,13 @@ def display_event_player_tab(dataset_df, event_player_df):
             (event_player_df['season'] == season) & 
             (event_player_df['week'] == week) & 
             (event_player_df['team'] == away_team)
-        ]
+        ].copy()
         
         home_players = event_player_df[
             (event_player_df['season'] == season) & 
             (event_player_df['week'] == week) & 
             (event_player_df['team'] == home_team)
-        ]
+        ].copy()
         
         # Display side by side comparison
         col1, col2 = st.columns(2)
@@ -47,20 +48,19 @@ def display_event_player_tab(dataset_df, event_player_df):
             for pos in ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']:
                 st.write(f"### {pos}")
                 pos_players = away_players[away_players['position'] == pos]
+                cols = ['name', 'projected_points'] + POSITION_STAT_MAP[pos]
                 if not pos_players.empty:
-                    st.dataframe(pos_players[[
-                        'name', 'projected_points', 'percent_owned', 'percent_started'
-                    ]])
+                    st.dataframe(pos_players[cols])
         
         with col2:
             st.subheader(home_team)
             for pos in ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']:
                 st.write(f"### {pos}")
                 pos_players = home_players[home_players['position'] == pos]
+                cols = ['name', 'projected_points'] + POSITION_STAT_MAP[pos]
+
                 if not pos_players.empty:
-                    st.dataframe(pos_players[[
-                        'name', 'projected_points', 'percent_owned', 'percent_started'
-                    ]])
+                    st.dataframe(pos_players[cols])
 
 def display_player_tab(player_df):
     st.subheader("Players", anchor=False)
@@ -71,16 +71,53 @@ def display_player_tab(player_df):
     season = st.selectbox('Select Season:', season_options, index=default_season_idx, key='player_season')
     
     week_options = sorted(player_df[player_df['season'] == season]['week'].unique())
-    default_week_idx = week_options.index(max(week_options))
-    week = st.selectbox('Select Week:', week_options, index=default_week_idx, key='player_week')
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        selected_weeks = st.multiselect('Select Weeks:', week_options, 
+                                      default=[max(week_options)],
+                                      key='player_weeks_multi',
+                                      help="Select one or more weeks. Select all weeks to see season totals.")
+    with col2:
+        agg_type = st.selectbox("Aggregation:", ["Average", "Total"], 
+                               index=1 if len(selected_weeks) == len(week_options) else 0)
+    
+    # If no weeks selected, default to all weeks with Total aggregation
+    if not selected_weeks:
+        selected_weeks = week_options
+        agg_type = "Total"
     
     # Filter type selection
     filter_type = st.radio("Filter by:", ["Team", "Position"])
-    
+
+    # Filter data for selected season and weeks
     filtered_df = player_df[
         (player_df['season'] == season) & 
-        (player_df['week'] == week)
+        (player_df['week'].isin(selected_weeks))
     ].copy()
+    
+    # Aggregate data if multiple weeks selected
+    if len(selected_weeks) > 1:
+        # Get non-stat columns that should be grouped
+        group_cols = ['name', 'team', 'position']
+        # Get stat columns that should be aggregated
+        stat_cols = ['projected_points'] + [col for pos in POSITION_STAT_MAP.values() for col in pos]
+        
+        # Create aggregation dictionary
+        if agg_type == "Average":
+            agg_dict = {col: 'mean' for col in stat_cols}
+        else:  # Total
+            agg_dict = {col: 'sum' for col in stat_cols}
+        
+        # Add non-stat columns to keep
+        for col in group_cols:
+            agg_dict[col] = 'first'
+        
+        # Perform aggregation
+        filtered_df = filtered_df.groupby(['team', 'position', 'name'], as_index=False).agg(agg_dict)
+
+    # Sort the dataframe by projected points
+    filtered_df = filtered_df.sort_values('projected_points', ascending=False)
     
     if filter_type == "Team":
         team_options = sorted(filtered_df['team'].unique())
@@ -92,16 +129,19 @@ def display_player_tab(player_df):
             pos_players = filtered_df[filtered_df['position'] == pos]
             if not pos_players.empty:
                 st.write(f"### {pos}")
-                st.dataframe(pos_players[[
-                    'name', 'projected_points', 'percent_owned', 'percent_started'
-                ]])
+                st.dataframe(pos_players[['name', 'projected_points'] + POSITION_STAT_MAP[pos]])
     
     else:  # Position
-        pos_options = sorted(filtered_df['position'].unique())
-        selected_pos = st.selectbox('Select Position:', pos_options)
-        filtered_df = filtered_df[filtered_df['position'] == selected_pos]
+        pos_options = ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']
+        selected_pos = st.multiselect('Select Positions:', pos_options,
+                                    help="Select one or more positions. Clear selection to see all positions.")
         
-        # Show all players of selected position
-        st.dataframe(filtered_df[[
-            'team', 'name', 'projected_points', 'percent_owned', 'percent_started'
-        ]])
+        if selected_pos:  # If positions are selected
+            filtered_df = filtered_df[filtered_df['position'].isin(selected_pos)]
+        
+        # Show all players of selected positions
+        for pos in (selected_pos if selected_pos else pos_options):
+            pos_players = filtered_df[filtered_df['position'] == pos]
+            if not pos_players.empty:
+                st.write(f"### {pos}")
+                st.dataframe(pos_players[['team', 'name', 'projected_points'] + POSITION_STAT_MAP[pos]])

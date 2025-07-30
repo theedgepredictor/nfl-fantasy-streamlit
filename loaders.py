@@ -46,13 +46,36 @@ def get_player_fantasy_projections(season, mode='weekly', group='OFF'):
         ]
         
         defensive_cols = [
-            'projected_defensive_solo_tackles', 'projected_defensive_total_tackles',
-            'projected_defensive_interceptions', 'projected_defensive_fumbles',
-            'projected_defensive_blocked_kicks', 'projected_defensive_safeties',
-            'projected_defensive_sacks', 'projected_defensive_touchdowns',
-            'projected_defensive_forced_fumbles', 'projected_defensive_passes_defensed',
-            'projected_defensive_points_allowed', 'projected_defensive_yards_allowed',
-            'projected_defensive_assisted_tackles'
+            'projected_defensive_solo_tackles',
+            'projected_defensive_total_tackles',
+            'projected_defensive_interceptions',
+            'projected_defensive_fumbles',
+            'projected_defensive_blocked_kicks',
+            'projected_defensive_safeties',
+            'projected_defensive_sacks',
+            'projected_defensive_touchdowns',
+            'projected_defensive_forced_fumbles',
+            'projected_defensive_passes_defensed',
+            'projected_defensive_assisted_tackles',
+            'projected_defensive_points_allowed',
+            'projected_defensive_yards_allowed',
+            'projected_defensive0_points_allowed',
+            'projected_defensive1_to6_points_allowed',
+            'projected_defensive7_to13_points_allowed',
+            'projected_defensive14_to17_points_allowed',
+            'projected_defensive18_to21_points_allowed',
+            'projected_defensive22_to27_points_allowed',
+            'projected_defensive28_to34_points_allowed',
+            'projected_defensive35_to45_points_allowed',
+            'projected_defensive45_plus_points_allowed',
+            'projected_defensive100_to199_yards_allowed',
+            'projected_defensive200_to299_yards_allowed',
+            'projected_defensive300_to349_yards_allowed',
+            'projected_defensive350_to399_yards_allowed',
+            'projected_defensive400_to449_yards_allowed',
+            'projected_defensive450_to499_yards_allowed',
+            'projected_defensive500_to549_yards_allowed',
+            'projected_defensive550_plus_yards_allowed'
         ]
         
         special_teams_cols = [
@@ -70,17 +93,22 @@ def get_player_fantasy_projections(season, mode='weekly', group='OFF'):
         ]
         
         if group == 'OFF':
-            stat_cols = offensive_cols
+            potential_stat_cols = offensive_cols
             positions = ['QB', 'RB', 'WR', 'TE']
         elif group == 'DEF':
-            stat_cols = defensive_cols
+            potential_stat_cols = defensive_cols
             positions = ['D/ST']
         elif group == 'ST':
-            stat_cols = special_teams_cols
+            potential_stat_cols = special_teams_cols
             positions = ['K']
         else:
-            raise ValueError("group must be one of ['OFF', 'DEF', 'ST']")
-            
+            ## All
+            potential_stat_cols = offensive_cols + defensive_cols + special_teams_cols
+            positions = ['QB', 'RB', 'WR', 'TE', 'D/ST', 'K']
+
+        # Only include stat columns that exist in the DataFrame
+        stat_cols = [col for col in potential_stat_cols if col in df.columns]
+
         meta_cols = season_meta if mode == 'season' else weekly_meta
         all_cols = meta_cols + stat_cols
         df = df[all_cols]
@@ -100,13 +128,8 @@ def load_player_data(seasons):
     """Load player data for all position groups"""
     all_player_data = []
     for season in seasons:
-        # Load data for each position group
-        off_data = get_player_fantasy_projections(season, mode='weekly', group='OFF')
-        def_data = get_player_fantasy_projections(season, mode='weekly', group='DEF')
-        st_data = get_player_fantasy_projections(season, mode='weekly', group='ST')
-        
-        # Combine all groups
-        season_data = pd.concat([off_data, def_data, st_data], ignore_index=True)
+        # Load data for each season
+        season_data = get_player_fantasy_projections(season, mode='weekly', group=None)
         all_player_data.append(season_data)
     
     # Combine all seasons

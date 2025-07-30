@@ -309,3 +309,68 @@ GLOSSARY = [
         'DESCRIPTION': 'Vegas Point Total. '
     },
 ]
+
+
+POSITION_STAT_MAP = {
+    "QB": [
+        'projected_passing_completions',
+        'projected_passing_attempts',
+        'projected_passing_yards',
+        'projected_passing_touchdowns',
+        'projected_passing_interceptions',
+        'projected_rushing_attempts', 
+        'projected_rushing_yards',
+        'projected_rushing_touchdowns',
+        'projected_fumbles',
+
+    ],
+    "RB": [
+        'projected_rushing_attempts', 
+        'projected_rushing_yards',
+        'projected_rushing_touchdowns',
+        'projected_fumbles',
+        'projected_receiving_targets',
+        'projected_receiving_yards',
+        'projected_receiving_touchdowns'
+    ],
+    "WR": [
+        'projected_receiving_targets',
+        'projected_receiving_yards',
+        'projected_receiving_touchdowns',
+        'projected_fumbles',
+        'projected_rushing_attempts', 
+        'projected_rushing_yards',
+        'projected_rushing_touchdowns',
+    ],
+    "TE": [
+        'projected_receiving_targets',
+        'projected_receiving_yards',
+        'projected_receiving_touchdowns',
+        'projected_fumbles',
+        'projected_rushing_attempts', 
+        'projected_rushing_yards',
+        'projected_rushing_touchdowns',
+
+
+    ],
+    "K": [
+        'projected_made_field_goals',
+        'projected_attempted_field_goals',
+        'projected_missed_field_goals',
+        'projected_made_extra_points',
+        'projected_attempted_extra_points',
+        'projected_missed_extra_points'
+    ],
+    "D/ST": [
+        'projected_defensive_points_allowed',
+        'projected_defensive_yards_allowed',
+        #'projected_defensive_solo_tackles',
+        #'projected_defensive_assisted_tackles',
+        'projected_defensive_total_tackles',
+        'projected_defensive_interceptions',
+        'projected_defensive_fumbles',
+        'projected_defensive_sacks',
+        'projected_defensive_touchdowns',
+        'projected_defensive_passes_defensed',
+    ]
+}

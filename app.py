@@ -8,8 +8,6 @@ import pandas as pd
 import datetime
 
 # Import tab modules
-from tabs.teams.teams_tab import display_team_tab
-from tabs.events.events_tab import display_event_tab
 from tabs.players.players_tab import display_event_player_tab, display_player_tab
 
 def find_year_for_season( date: datetime.datetime = None):
@@ -51,25 +49,15 @@ st.set_page_config(layout='wide')
 
 
 def main():
-    st.title('The Edge Predictor NFL Statistics', anchor=False)
+    st.title('The Edge Predictor NFL Fantasy Statistics', anchor=False)
     # Load data
     dataset_df, folded_df, player_df = load_feature_store(SEASONS)
 
     ### Define tabs for Team, Event, Event Players, and Players
-    event_tab, team_tab, event_player_tab, player_tab = st.tabs([
-        "Events",
-        "Teams",
+    event_player_tab, player_tab = st.tabs([
         "Event Players",
         "Players"
     ])
-
-    with event_tab:
-        st.markdown(STYLE, unsafe_allow_html=True)
-        display_event_tab(dataset_df, folded_df)
-
-    with team_tab:
-        st.markdown(STYLE, unsafe_allow_html=True)
-        display_team_tab(folded_df)
 
     with event_player_tab:
         st.markdown(STYLE, unsafe_allow_html=True)
